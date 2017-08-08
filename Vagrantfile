@@ -1,9 +1,16 @@
-#Define variables for servers
+#Define all servers:
 
-srvFirstIP = "192.168.50.50"
-srvFirstHostName = "server1"
-srvSecondIP = "192.168.50.55"
-srvSecondHostName = "server2"
+servers = { 
+    :gitserver => {
+	  :hostname => "server1",
+	  :ipaddress => "192.168.50.50",
+	  :role => "main"
+	},
+    :appserver => {
+	  :hostname => "server2",
+	  :ipaddress => "192.168.50.55"
+	}
+}
 
 #Scrpipt for hosts file update
 $scriptHostUpdate = <<SCRIPT
@@ -14,8 +21,7 @@ SCRIPT
 
 #Script for Git 
 $scriptGit = <<SCRIPT
-sudo yum install git -y
-cd /home
+yum install git -y
 git clone https://github.com/vpr-trn/training.git
 cd training
 git checkout task1
@@ -27,8 +33,6 @@ echo '-----\nend of test1.txt file'
 
 SCRIPT
 
-#echo '192.168.50.55 server2 server2' >> /etc/hosts  
-
 Vagrant.configure("2") do |config|
   config.vm.box = "bertvv/centos72"
   config.vm.box_check_update = false
@@ -37,18 +41,19 @@ Vagrant.configure("2") do |config|
 #    vb.gui = true
 #  end
  
-  config.vm.define "server1" do |server1|
-    server1.vm.hostname = srvFirstHostName
-    server1.vm.network "private_network", ip: srvFirstIP
-	server1.vm.provision :shell, :inline => $scriptHostUpdate, :args =>[srvSecondIP,srvSecondHostName]
-	server1.vm.provision :shell, :inline => $scriptGit
+ servers.each do |server,options|
+  config.vm.define server do |server_cfg|
+    server_cfg.vm.hostname = options[:hostname]
+    server_cfg.vm.network :private_network, ip: options[:ipaddress]
+	if options[:role] == "main"
+	  server_cfg.vm.provision :shell, :inline => $scriptGit
+	end
+	servers.each do |hosts,attributes|
+	  server_cfg.vm.provision :shell, :inline => $scriptHostUpdate, :args =>[attributes[:ipaddress], attributes[:hostname]]
+	end
+	
   end
-
-  config.vm.define "server2" do |server2|
-    server2.vm.hostname = srvSecondHostName
-	server2.vm.network "private_network", ip: srvSecondIP
-	server2.vm.provision :shell, :inline => $scriptHostUpdate, :args =>[srvFirstIP,srvFirstHostName]
-  end
+end
 
 end
 
