@@ -1,4 +1,5 @@
 #Define all servers:
+APPSRV_COUNT =2
 
 servers = { 
     :gitserver => {
@@ -13,23 +14,52 @@ servers = {
 }
 
 #Scrpipt for hosts file update
-$scriptHostUpdate = <<SCRIPT
+$scriptAppserver = <<SCRIPT
+echo "192.168.50.50 webserver webserver" >> /etc/hosts  
+mkdir usr/share/tomcat/webapps/test/
+echo "tomcat$1" >> usr/share/tomcat/webapps/test/index.html
+systemctl stopfirewalld
+yum install tomcat tomcat-webapps tomcat-admin-webapps
+sudo systemctl enable tomcat
+sudo systemctl start tomcat
 
-echo "$1 $2 $2" >> /etc/hosts  
 
 SCRIPT
 
 #Script for Git 
-$scriptGit = <<SCRIPT
-yum install git -y
-git clone https://github.com/vpr-trn/training.git
-cd training
-git checkout task1
-git pull
+$scriptWebServer = <<SCRIPT
+echo "192.168.50.56 server1 server1" >> /etc/hosts
+echo "192.168.50.57 server2 server2" >> /etc/hosts
 
-echo 'Printing content of test1.txt file to console:\n-----\n'
-cat test1.txt
-echo '-----\nend of test1.txt file'
+systemctl stopfirewalld
+yum install httpd
+sudo cp /vagrant/mod_jk.so /etc/httpd/modules
+rm -f /etc/httpd/conf/workers.properties
+
+cat <<MYC >> /etc/httpd/conf/workers.properties
+worker.list=lb
+worker.lb.type=lb
+worker.lb.balance_workers=myworker1, myworker2
+worker.worker1.type=ajp13
+worker.worker1.host=server1
+worker.worker1.port=8009
+worker.worker2.type=ajp13
+worker.worker1.host=server2
+worker.worker1.port=8009
+MYC
+rm -f /etc/httpd/conf/conf.d/web.conf
+
+cat <<MYC >> /etc/httpd/conf/conf.d/web.conf
+LoadModule    jk_module  modules/mod_jk.so
+JkWorkersFile conf/workers.properties
+JkShmFile /tmp/shm
+JkLogFile logs/mod_jk.log
+JkLogLevel info
+JkMount /test* lb
+MYC
+
+systemctl enable httpd
+sudo systemctl start httpd
 
 SCRIPT
 
@@ -40,20 +70,19 @@ Vagrant.configure("2") do |config|
 #  config.vm.provider "virtualbox" do |vb|
 #    vb.gui = true
 #  end
- 
- servers.each do |server,options|
-  config.vm.define server do |server_cfg|
-    server_cfg.vm.hostname = options[:hostname]
-    server_cfg.vm.network :private_network, ip: options[:ipaddress]
-	if options[:role] == "main"
-	  server_cfg.vm.provision :shell, :inline => $scriptGit
-	end
-	servers.each do |hosts,attributes|
-	  server_cfg.vm.provision :shell, :inline => $scriptHostUpdate, :args =>[attributes[:ipaddress], attributes[:hostname]]
-	end
+ config.vm.define mainserver do |server|
+    server.vm.hostname = webserver
+	server.vm.network :private_network, ip: "192.168.50.50"
 	
-  end
-end
-
+ end
+ 
+ (1..APPSRV_COUNT).each do |i|
+    config.vm.define "server#{i}" do |appserver|
+      appserver.vm.hostname = "server#{i}"
+	  appserver.vm.network :private_network, ip: "192.168.50.#{i+55}"
+	  appserver.vm.provision :shell, :inline => $ScriptAppServer, :args => #{i}
+	  
+    end
+ end
 end
 
