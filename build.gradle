@@ -1,0 +1,42 @@
+apply plugin: 'war'
+
+repositories 
+{
+    mavenCentral()
+    jcenter()
+}
+
+dependencies 
+{
+  compile group: 'log4j', name: 'log4j', version: '1.2.17'
+  compile group: 'org.apache.commons', name: 'commons-io', version: '1.3.2'
+
+}
+
+task addversion doLast{
+  Properties props = new Properties()
+  File propsFile = new File('gradle.properties')
+  props.load(propsFile.newDataInputStream())
+  String version = (props.getProperty('version')) as String
+  File buildFile = new File('build/resources/main/greeting.txt')
+  buildFile.append(System.getProperty("line.separator") + '---' + System.getProperty("line.separator") + 'Build '+ version)
+
+}
+
+task increment << 
+{
+  Properties props = new Properties()
+  File propsFile = new File('gradle.properties')
+  props.load(propsFile.newDataInputStream())
+  Integer nextbuildnum = ( ((props.getProperty('version')) as BigDecimal) + 1 )
+  props.setProperty('version', nextbuildnum.toString())
+  props.store(propsFile.newWriter(), null)
+  props.load(propsFile.newDataInputStream())
+}
+
+war 
+{
+  archiveName = 'task3.war'
+}
+addversion.dependsOn processResources
+classes.dependsOn addversion
