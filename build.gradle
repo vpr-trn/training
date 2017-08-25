@@ -1,5 +1,10 @@
 apply plugin: 'war'
 
+war 
+{
+  archiveName = project.property('buildfile')
+}
+
 repositories 
 {
     mavenCentral()
@@ -34,9 +39,6 @@ task increment <<
   props.load(propsFile.newDataInputStream())
 }
 
-war 
-{
-  archiveName = 'task3.war'
-}
+
 addversion.dependsOn processResources
 classes.dependsOn addversion
