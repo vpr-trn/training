@@ -2,7 +2,7 @@ apply plugin: 'war'
 
 war 
 {
-  archiveName = project.property('buildfile')
+  archiveName = findProperty('buildfile')
 }
 
 repositories 
@@ -19,6 +19,7 @@ dependencies
 }
 
 task addversion doLast{
+  
   Properties props = new Properties()
   File propsFile = new File('gradle.properties')
   props.load(propsFile.newDataInputStream())
