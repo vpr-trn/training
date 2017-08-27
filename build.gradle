@@ -1,3 +1,5 @@
+import java.text.DecimalFormat
+
 apply plugin: 'war'
 
 war 
@@ -31,11 +33,19 @@ task addversion doLast{
 
 task increment << 
 {
+  DecimalFormat df = new DecimalFormat("0000")
   Properties props = new Properties()
   File propsFile = new File('gradle.properties')
   props.load(propsFile.newDataInputStream())
-  Integer nextbuildnum = ( ((props.getProperty('version')) as BigDecimal) + 1 )
-  props.setProperty('version', nextbuildnum.toString())
+  String version = (props.getProperty('version')) as String
+  String minor = version.substring(version.lastIndexOf('.')+1)
+  BigDecimal newbuild = (minor as BigDecimal)+1
+  if (newbuild > 9999) {
+    throw new GradleException('Minor build version is greater than 9999. Please correct version number in gradle.properties file')
+  }
+  minor=df.format(newbuild)
+  version = version.take(version.length()-4)+ minor  
+  props.setProperty('version', version)
   props.store(propsFile.newWriter(), null)
   props.load(propsFile.newDataInputStream())
 }
