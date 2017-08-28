@@ -1,0 +1,81 @@
+#!groovy
+
+node {
+def buildversion = ''
+//Artifact name
+def buildname = 'task3'
+def buildfile = "${buildname}.war"
+// Name of development git branch.
+def gitbranch = 'task3'
+// Number of tomcat servers to deploy artifact in
+def servernumber = 1
+
+  //agent any
+  stage('Git-Clone'){  
+    checkout([$class: 'GitSCM', branches: [[name: 'task3']], doGenerateSubmoduleConfigurations: false, userRemoteConfigs: [[credentialsId: 'GITHUB_ID', url: 'https://github.com/vpr-trn/training.git']]])
+}
+
+  stage('Build'){
+    sh 'chmod +x gradlew'
+    sh './gradlew increment --info'
+    sh "./gradlew build -P buildfile=${buildfile} --info"
+    buildversion = GetVersion()
+  }
+
+  stage ('Archive'){
+    // upload file to nexus
+    sh "curl --upload-file build/libs/$buildfile http://admin:admin123@localhost:8081/nexus/content/repositories/snapshots/${gitbranch}/${buildversion}/${buildfile}"
+  }
+
+  stage('Deploy'){  
+    // download file from nexus
+    httpRequest authentication: 'NEXUS_ID', url: "http://localhost:8081/nexus/content/repositories/snapshots/${gitbranch}/${buildversion}/${buildfile}", outputFile: "${buildfile}"
+    for (i=1;i<servernumber;i++){
+      // stop tomcat
+      sh "curl http://localhost/jkmanager?cmd=update&w=lb&sw=worker${i}&vwa=2"
+      // undeploy app
+      httpRequest authentication: 'TOMCAT_ID', consoleLogResponseBody: true,
+      responseHandle: 'NONE', 
+      url: "http://server${i}:8080/manager/text/undeploy?path=/${buildname}"
+      // deploy into tomcat
+      sh "curl -T ${buildfile} http://admin:admin123@server1:8080/manager/text/deploy?path=/${buildname}"
+      //
+      def response = httpRequest acceptType: 'TEXT_PLAIN', consoleLogResponseBody: true, 
+      contentType: 'TEXT_PLAIN', 
+      responseHandle: 'NONE', 
+      url: "http://server${i}:8080/${buildname}"
+      echo response.content
+      if (!response.content.contains(buildversion)) {
+        error ("Application deployment error on server${i}!")
+      }
+    } 
+    // waiting 5 seconds until package installed
+    sleep 5
+    // start tomcat
+    sh 'curl "http://localhost/jkmanager?cmd=update&w=lb&sw=worker${i}&vwa=0"'
+  }
+    stage('Git-Release'){  
+      sh "git checkout ${gitbranch}"
+      sh 'git add gradle.properties'
+      sh 'git config user.email jenkins@mainserver.com'
+      sh 'git config user.name jenkins'
+      sh 'git commit -m "Added file with automated Jenikins job"'
+      sshagent (credentials: ['GITHUB_SSH']) {
+        sh 'ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts'
+        sh 'git push git@github.com:vpr-trn/training.git'
+      }
+      sh 'git checkout master -f'
+      sh "git merge ${gitbranch}"
+      sh "git tag -a ${buildversion} -m \"Build version ${buildversion}\""
+      sshagent (credentials: ['GITHUB_SSH']) {
+        sh 'git push git@github.com:vpr-trn/training.git --tags'
+        sh 'git push git@github.com:vpr-trn/training.git'
+      }
+    }
+}
+
+def GetVersion()
+{
+   def props = readProperties  file: 'gradle.properties'
+   return props['version']
+}
