@@ -1,0 +1,7 @@
+DEPENDENCIES
+  task6
+    path: .
+    metadata: true
+
+GRAPH
+  task6 (0.1.0)
